@@ -75,8 +75,12 @@ class WaypointUpdater(object):
         return closest_idx
 
     def publish_waypoints(self, closest_idx):
+        #lane = Lane()
+        #lane.header = self.base_waypoints.header
+        #lane.waypoints = self.base_waypoints.waypoints[closest_idx:closest_idx + LOOKAHEAD_WPS]
+        #self.final_waypoints_pub.publish(lane)
         final_lane = self.generate_lane()
-        self.final_waypoints_pub.publish(lane)
+        self.final_waypoints_pub.publish(final_lane)
 
     def generate_lane(self):
         lane = Lane()
@@ -111,6 +115,7 @@ class WaypointUpdater(object):
 
 
     def pose_cb(self, msg):
+        #rospy.logwarn("pose_cb: {0}".format(msg))
         self.pos = msg
 
     def waypoints_cb(self, waypoints):
@@ -135,7 +140,7 @@ class WaypointUpdater(object):
 
     def distance(self, waypoints, wp1, wp2):
         dist = 0
-        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2)
         for i in range(wp1, wp2+1):
             dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
             wp1 = i
