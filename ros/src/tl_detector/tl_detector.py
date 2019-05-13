@@ -24,6 +24,7 @@ class TLDetector(object):
         self.waypoint_tree = None
         self.camera_image = None
         self.lights = []
+        self.model_name = None
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
@@ -45,9 +46,9 @@ class TLDetector(object):
 
         self.bridge = CvBridge()
         if self.config['is_site']:
-           self.model_name = 'real_mobilenets_ssd_38k_epochs_frozen_inference_graph.pb'
+           self.model_name = 'frozen_inference_graph_real.pb'
         else:
-           self.model_name = 'sim_mobilenets_ssd_30k_epochs_frozen_inference_graph.pb'
+           self.model_name = 'frozen_inference_graph_sim.pb'
         self.light_classifier = TLClassifier(self.model_name)
         self.listener = tf.TransformListener()
 
