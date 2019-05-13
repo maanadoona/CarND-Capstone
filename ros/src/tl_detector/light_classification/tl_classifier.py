@@ -36,7 +36,7 @@ class TLClassifier(object):
         self.sess = tf.Session(graph=self.detection_graph, config=config)
 
 
-    def load_graph(graph_file):
+    def load_graph(self, graph_file):
         """Loads a frozen inference graph"""
         graph = tf.Graph()
         with graph.as_default():
