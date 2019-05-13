@@ -14,7 +14,7 @@ class TLClassifier(object):
         cwd = os.path.dirname(os.path.realpath(__file__))
 
         #model_path = os.path.join(cwd, "../../../../train_model/{}".format(model_file))
-        model_path = "../../../../train_model/" + model_file
+        model_path = "../../../train_model/" + model_file
         rospy.logwarn("model_path={}".format(model_path))
 
         # load frozen tensorflow model
