@@ -13,11 +13,12 @@ class TLClassifier(object):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
 
-        model_path = os.path.join(cwd, "../../../../train_model/{}".format(model_file))
+        #model_path = os.path.join(cwd, "../../../../train_model/{}".format(model_file))
+        model_path = "../../../../train_model/" + model_file
         rospy.logwarn("model_path={}".format(model_path))
 
         # load frozen tensorflow model
-        self.detection_graph = load_graph(model_path)
+        self.detection_graph = self.load_graph(model_path)
 
         self.category_index = {1: {'id': 1, 'name': 'Green'}, 2: {'id': 2, 'name': 'Red'},
                                3: {'id': 3, 'name': 'Yellow'}, 4: {'id': 4, 'name': 'off'}}
@@ -34,8 +35,7 @@ class TLClassifier(object):
         self.num_detections = self.detection_graph.get_tensor_by_name('num_detections:0')
 
         self.sess = tf.Session(graph=self.detection_graph, config=config)
-
-
+        
     def load_graph(self, graph_file):
         """Loads a frozen inference graph"""
         graph = tf.Graph()
@@ -94,4 +94,6 @@ class TLClassifier(object):
         else:
             self.current_light = TrafficLight.RED
 
+        rospy.logwarn("current_light={0}".format(self.current_light))
+            
         return self.current_light
