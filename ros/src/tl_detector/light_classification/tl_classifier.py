@@ -1,96 +1,175 @@
-import rospy
 from styx_msgs.msg import TrafficLight
-import rospkg
-import os,sys
-import tensorflow as tf
 import numpy as np
-import time
 import os
+import tensorflow as tf
+import rospy
+import time
+import calendar
 import cv2
+import yaml
 
-def load_graph (graph_file):
-    """
-    Loads the frozen inference protobuf file 
-    """
-    graph = tf.Graph()
-    with graph.as_default():
-        od_graph_def = tf.GraphDef()
-        with tf.gfile.GFile(graph_file, 'rb') as fid:
-            serialized_graph = fid.read()
-            od_graph_def.ParseFromString(serialized_graph)
-            tf.import_graph_def(od_graph_def, name='prefix')
-    return graph
-
-
-def filter_results(min_score, scores, classes):
-    """Return tuple (scores, classes) where score[i] >= `min_score`"""
-    n = len(classes)
-    idxs = []
-    for i in range(n):
-        if scores[i] >= min_score:
-            idxs.append(i)
-        
-    filtered_scores = scores[idxs, ...]
-    filtered_classes = classes[idxs, ...]
-    return filtered_scores, filtered_classes
-
+from utils import label_map_util
+from utils import visualization_utils as vis_util
 
 class TLClassifier(object):
-    
-    def __init__(self, is_site=False):       
-        self.__model_loaded = False
-        self.tf_session = None
-        self.prediction = None
-        self.path_to_model = '../../../train_model/'
-        #self.sample_image_path = '../../../deep_learning/assets/test_real.png'
-       # ros_root = rospkg.get_ros_root()
-       # Not using the following for now to locate the classification model
-       # using absolute path since the models are in deep_learning/....
-       # If we decide to put the models in 'tl_detector' then we would use the following
+    VISUALIZE = False
 
-        self.load_model(is_site)
+    def __init__(self):
+        config_string = rospy.get_param("/traffic_light_config")
+        self.config = yaml.safe_load(config_string)
+        self.img_width = self.config['camera_info']['image_width']
+        self.img_height = self.config['camera_info']['image_height']
+        #rospy.loginfo("width: {} height: {}".format(self.img_width, self.img_height))
+        self.is_real = self.config['is_site']
 
-    def load_model(self, is_site):
-        detect_path = rospkg.RosPack().get_path('tl_detector')
-        if is_site:
-           self.path_to_model += 'frozen_inference_graph_real.pb'
+        self.detection_graph = None
+        self.num_detections = None
+        self.detection_boxes = None
+        self.detection_scores = None
+        self.detection_classes = None
+        self.visualize_image = None
+        self.label_map = None
+        self.category_index = None
+        self.MIN_SCORE_THRESHOLD = 0.40
+        self.NUM_CLASSES = 4
+
+        CLASSIFIER_BASE = os.path.dirname(os.path.realpath(__file__))
+        #GRAPH = 'frozen_inference_graph.pb'
+        GRAPH = 'quantized_optimized_inference_graph.pb'
+
+        if self.is_real:
+            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_real'
+            rospy.loginfo("In real site environment...use {}/{}".format(
+                MODEL_NAME, GRAPH))
         else:
-           self.path_to_model += 'frozen_inference_graph_sim.pb'
-        rospy.loginfo('model going to be loaded from '+self.path_to_model)
+            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_sim'
+            rospy.loginfo("In simulator environment...use {}/{}".format(
+                MODEL_NAME, GRAPH))
 
-        # load the graph using the path to model file
-        # path_to_model has the absolute path
-        self.tf_graph = load_graph(self.path_to_model)
-        self.config = tf.ConfigProto(log_device_placement=False)
-        # GPU video memory usage setup
-        self.config.gpu_options.per_process_gpu_memory_fraction = 0.8  
-        #Setup timeout for any inactive option 
-        self.config.operation_timeout_in_ms = 50000 
-
-        # Declaring our placeholders
-        self.image_tensor = self.tf_graph.get_tensor_by_name('prefix/image_tensor:0')
-
-        # Each box represents a part of the image where a particular object was detected.
-        self.detection_scores = self.tf_graph.get_tensor_by_name('prefix/detection_scores:0')
-
-        # Number of predictions found in the image
-        self.num_detections = self.tf_graph.get_tensor_by_name('prefix/num_detections:0')
-
-        # Classification of the object (integer id)
-        self.detection_classes = self.tf_graph.get_tensor_by_name('prefix/detection_classes:0')
-
-        with self.tf_graph.as_default():            
-            # tf_start_time = time.time()    
-            self.tf_session = tf.Session(graph=self.tf_graph, config=self.config)        
-
-        self.__model_loaded = True                      
-        #img = cv2.imread(self.sample_image_path, cv2.IMREAD_COLOR)
-        #self.get_classification(img)        
-        #rospy.loginfo("Successfully loaded model, configured placeholders, and ran inference on sample image")
+        PATH_TO_CKPT = CLASSIFIER_BASE + '/' + MODEL_NAME + '/' + GRAPH
+        PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
 
 
+        ### Load Tensorflow model graph
+        self.detection_graph = tf.Graph()
+        with self.detection_graph.as_default():
+            od_graph_def = tf.GraphDef()
+            with tf.gfile.GFile(PATH_TO_CKPT, 'rb') as fid:
+                serialized_graph = fid.read()
+                od_graph_def.ParseFromString(serialized_graph)
+                tf.import_graph_def(od_graph_def, name='')
 
-    def get_classification(self, image, confidence_cutoff=0.3):
+        ### Load label map
+        self.label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
+        categories = label_map_util.convert_label_map_to_categories(self.label_map,
+            max_num_classes=self.NUM_CLASSES, use_display_name=True)
+        self.category_index = label_map_util.create_category_index(categories)
+
+
+    def run_inference_for_single_image(self, image):
+        self.num_detections = None
+        self.detection_boxes = None
+        self.detection_scores = None
+        self.detection_classes = None
+
+        with self.detection_graph.as_default():
+            with tf.Session(graph=self.detection_graph) as sess:
+                # Get handles to input and output tensors
+                ops = tf.get_default_graph().get_operations()
+                all_tensor_names = \
+                    {output.name for op in ops for output in op.outputs}
+                tensor_dict = {}
+                for key in [
+                    'num_detections', 'detection_boxes', 'detection_scores',
+                    'detection_classes'
+                ]:
+                    tensor_name = key + ':0'
+                    if tensor_name in all_tensor_names:
+                        tensor_dict[key] = \
+                            self.detection_graph.get_tensor_by_name(tensor_name)
+
+                image_tensor = \
+                    self.detection_graph.get_tensor_by_name('image_tensor:0')
+
+                ### Run inference
+                # Expand dimensions since the model expects
+                # images to have shape: [1, None, None, 3]
+                image_np_expanded = np.expand_dims(image, axis=0)
+                output_dict = sess.run(tensor_dict,
+                             feed_dict={image_tensor: image_np_expanded})
+
+                # all outputs are float32 numpy arrays,
+                # so convert types as appropriate
+                self.num_detections = output_dict['num_detections'][0]
+                self.detection_boxes = output_dict['detection_boxes'][0]
+                self.detection_scores = output_dict['detection_scores'][0]
+                self.detection_classes = \
+                    output_dict['detection_classes'][0].astype(np.uint8)
+
+
+    def predict_state(self):
+        """Since there can be multiple detections in any one image...
+            - Get the detected boxes with scores over minimum threshold.
+            - Add up scores for each classification.
+            - Normalize by dividing total scores by total number of
+              detections with scores over the minimum threshold.
+            - Predicted classified state is the state with the highest
+              normalized score.
+        """
+        det_scores = { "Green": 0, "Red": 0, "Yellow": 0, "Unknown": 0}
+
+        det_count = 0
+        #rospy.loginfo("num_detections: {}, detection_boxes: {}".format(
+        #    self.num_detections, self.detection_boxes.shape[0]
+        #))
+
+        for i in range(0, self.num_detections):
+            if self.detection_scores is not None:
+                det_score = self.detection_scores[i]
+                if det_score > self.MIN_SCORE_THRESHOLD:
+                    det_state = self.detection_classes[i]
+                    det_name = self.category_index[det_state]['name']
+                    det_scores[det_name] += det_score
+                    det_count += 1
+
+        max_det_score = 0
+        max_det_state = "Unknown"
+        for key in det_scores.keys():
+            # Normalize the scores
+            if det_count > 0:
+                det_scores[key] /= (det_count * 1.0)
+            # See if the normalized score is the highest
+            if det_scores[key] > max_det_score:
+                max_det_score = det_scores[key]
+                max_det_state = key
+
+        rospy.loginfo(det_scores)
+        rospy.loginfo("Predicted state: {}   Normalized score: {}".format(
+            max_det_state, max_det_score))
+        return max_det_state
+
+    def save_visualization(self, state, vis):
+        """
+        Args:
+            state: state name label for the traffic light predicted state
+            vis (int):
+                - 0 indicates visual with NO bounding boxes, just the
+                plain captured image itself.
+                - 1 indicates visual includes bounding boxes drawn on
+                the image to be saved
+        """
+        # use timestamp to make unique filenames
+        f_name = "tl_{}_{}_{}.jpg".format(calendar.timegm(time.gmtime()),
+            vis, state)
+        dir = 'data/visual'
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+        pathname = '{}/{}'.format(dir, f_name)
+        self.visualize_image = self.visualize_image[:, :, ::-1]
+        cv2.imwrite(pathname, self.visualize_image)
+
+
+    def get_classification(self, image):
         """Determines the color of the traffic light in the image
 
         Args:
@@ -99,36 +178,47 @@ class TLClassifier(object):
         Returns:
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
-        """        
-        if not self.__model_loaded:
-            return TrafficLight.UNKNOWN
-        
-        colors = ["RED", "YELLOW", "GREEN"]
-        image_np = np.expand_dims(np.asarray(image, dtype=np.uint8), 0)
+        """
+        self.visualize_image = None
+        image_np = np.asarray(image, dtype="int32")
+        #image_np = np.array(image, dtype="int32").reshape(
+        #    (self.img_height, self.img_width, 3)).astype(np.uint8)
 
-        
-        # Get the scores, classes and number of detections
-        # re-use the session: it is more than 3x faster than creating a new one for every image
-        (scores, classes, num) = self.tf_session.run(
-            [self.detection_scores, self.detection_classes, self.num_detections],
-            feed_dict={self.image_tensor: image_np})
+        ### Detect traffic lights ###
+        start_t = time.time()
+        self.run_inference_for_single_image(image_np)
+        rospy.loginfo('Inference time: {}s'.format(time.time() - start_t))
 
-        # Removing unecessary dimensions
-        scores = np.squeeze(scores)
-        classes = np.squeeze(classes).astype(np.int32)
+        predicted_state = self.predict_state()
 
-        # And pruning results below the cutoff
-        final_scores, final_classes = filter_results(confidence_cutoff, scores, classes)
 
-        end_time = time.time()
+        ### For visualization #######################################
+        if TLClassifier.VISUALIZE:
+            # Save image before applying boxes (Useful for capturing
+            # images for augmenting training data)
+            self.visualize_image = image_np
+            self.save_visualization(predicted_state, 0)
 
-        if len(final_classes) == 0:
-            rospy.loginfo("*** Predicted color did not make the cut " + colors[classes[0] - 1] + " and score is " + str(scores[0]))     
-            return TrafficLight.UNKNOWN
+            # Save bounding boxes image
+            vis_util.visualize_boxes_and_labels_on_image_array(
+                image_np,
+                np.squeeze(self.detection_boxes),
+                np.squeeze(self.detection_classes).astype(np.int32),
+                np.squeeze(self.detection_scores),
+                self.category_index,
+                use_normalized_coordinates=True,
+                min_score_thresh=self.MIN_SCORE_THRESHOLD,
+                line_thickness=3)
+            self.visualize_image = image_np
+            self.save_visualization(predicted_state, 1)
+        #############################################################
 
-        #TrafficLight messages have red = 0, yellow = 1, green = 2. 
-        # The model is trained to identify class red = 1, yellow = 2, green = 3. 
-        # Hence, subtracting 1 to match with TrafficLight message spec.
-        rospy.loginfo("Predicted color is " + colors[final_classes[0] - 1] + " and score is " + str(final_scores[0])) 
-        return final_classes[0] - 1      
-            
+
+        if predicted_state == "Red":
+            return TrafficLight.RED
+        elif predicted_state == "Yellow":
+            return TrafficLight.YELLOW
+        elif predicted_state == "Green":
+            return TrafficLight.GREEN
+
+        return TrafficLight.UNKNOWN
