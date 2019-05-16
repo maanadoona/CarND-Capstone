@@ -43,6 +43,7 @@ class WaypointUpdater(object):
         self.base_waypoints = None
         self.waypoints_2d = None
         self.waypoint_tree = None
+        self.track_waypoint_count = -1
 
         self.loop()
         #rospy.spin()
@@ -51,7 +52,7 @@ class WaypointUpdater(object):
         rate = rospy.Rate(50)
         while not rospy.is_shutdown():
             if self.pose and self.base_waypoints:
-                closest_waypoint_idx = self.get_closest_waypoint_idx()
+                #closest_waypoint_idx = self.get_closest_waypoint_idx()
                 self.publish_waypoints(closest_waypoint_idx)
             rate.sleep()
 
@@ -79,6 +80,8 @@ class WaypointUpdater(object):
         #lane.header = self.base_waypoints.header
         #lane.waypoints = self.base_waypoints.waypoints[closest_idx:closest_idx + LOOKAHEAD_WPS]
         #self.final_waypoints_pub.publish(lane)
+        if self.track_waypoint_count == -1:
+            return        
         final_lane = self.generate_lane()
         self.final_waypoints_pub.publish(final_lane)
 
@@ -87,9 +90,30 @@ class WaypointUpdater(object):
 
         closest_idx = self.get_closest_waypoint_idx()
         farthest_idx = closest_idx + LOOKAHEAD_WPS
-        base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
 
-        if self.stopline_wp_idx == -1 or (self.stopline_wp_idx >= farthest_idx):
+        if farthest_idx < self.track_waypoint_count:
+            base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
+            #rospy.logfatal('\nNormal closest_idx: %d, farthest_idx:%d, length of self.base_lane.waypoints :%d', closest_idx, farthest_idx, len(base_waypoints))
+        else:
+            rospy.logfatal("WP lookahead passed end of track!!!")
+            offset = farthest_idx - self.track_waypoint_count
+            farthest_idx = self.track_waypoint_count - 2
+            base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
+
+            base_waypoints = base_waypoints + self.base_lane.waypoints[0:offset]
+            #rospy.logfatal('\nError! closest_idx: %d, farthest_idx:%d, length of self.base_lane.waypoints :%d', closest_idx, farthest_idx, len(base_waypoints))
+
+
+        #if(len(base_waypoints) != LOOKAHEAD_WPS):
+            #rospy.logfatal('\nError! closest_idx: %d, farthest_idx:%d, length of self.base_lane.waypoints :%d', closest_idx, farthest_idx, len(base_waypoints))
+
+        #rospy.loginfo('\nsdevikar: generate_lane called - closest_idx:%d, farthest_idx:%d, stopline_wp_idx:%d', closest_idx, farthest_idx, self.stopline_wp_idx)
+        # keep the base waypoints as final_waypoints if the traffic light is
+        # not in sight or too far
+        if (self.stopline_wp_idx == -1):
+            lane.waypoints = base_waypoints
+        elif (self.stopline_wp_idx >= farthest_idx):
+            #rospy.logfatal('\nsdevikar: Stop light detected,but out of range')
             lane.waypoints = base_waypoints
         else:
             lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
@@ -102,9 +126,24 @@ class WaypointUpdater(object):
             p = Waypoint()
             p.pose = wp.pose
 
+            wpts_count_before_stopline = self.stopline_wp_idx - closest_idx
+
+            wpts_count_before_stopline_to_nose = wpts_count_before_stopline - 3
+            stop_idx = max(wpts_count_before_stopline_to_nose, 0)
+
             stop_idx = max(self.stopline_wp_idx - closest_idx - 2, 0)
             dist = self.distance(waypoints, i, stop_idx)
-            vel = math.sqrt(2 * MAX_DECEL * dist)
+            #rospy.logfatal('Distance is %d', dist)
+            # calculate velocity for this waypoint by factoring in the distance
+            # to stop waypoint and the desired deceleration
+            #vel = math.sqrt(2 * MAX_DECEL * dist)
+            if dist <= 1:
+                vel = 0
+            elif dist <=5:
+                vel = math.sqrt(2 * MAX_DECEL * dist)
+            else:
+                vel = wp.twist.twist.linear.x - (wp.twist.twist.linear.x/dist)
+            
             if vel < 1.:
                 vel = 0.
 
@@ -119,6 +158,7 @@ class WaypointUpdater(object):
         self.pos = msg
 
     def waypoints_cb(self, waypoints):
+        self.track_waypoint_count = len(waypoints.waypoints)
         self.base_waypoints = waypoints
         if not self.waypoints_2d:
             self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in waypoints.waypoints]
