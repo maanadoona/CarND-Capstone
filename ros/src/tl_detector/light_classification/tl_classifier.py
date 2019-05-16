@@ -25,6 +25,7 @@ class TLClassifier(object):
         self.detection_boxes = None
         self.detection_scores = None
         self.detection_classes = None
+        self.label_map = None
         self.category_index = None
         self.MIN_SCORE_THRESHOLD = 0.40
         self.NUM_CLASSES = 4
@@ -43,6 +44,7 @@ class TLClassifier(object):
                 MODEL_NAME, GRAPH))
 
         PATH_TO_CKPT = CLASSIFIER_BASE + '/' + MODEL_NAME + '/' + GRAPH
+        PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
 
 
         ### Load Tensorflow model graph
@@ -53,6 +55,12 @@ class TLClassifier(object):
                 serialized_graph = fid.read()
                 od_graph_def.ParseFromString(serialized_graph)
                 tf.import_graph_def(od_graph_def, name='')
+
+        ### Load label map
+        self.label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
+        categories = label_map_util.convert_label_map_to_categories(self.label_map,
+            max_num_classes=self.NUM_CLASSES, use_display_name=True)
+        self.category_index = label_map_util.create_category_index(categories)
 
 
     def run_inference_for_single_image(self, image):
