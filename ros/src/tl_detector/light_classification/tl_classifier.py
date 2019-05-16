@@ -53,9 +53,9 @@ class TLClassifier(object):
     def load_model(self, is_site):
         detect_path = rospkg.RosPack().get_path('tl_detector')
         if is_site:
-           self.path_to_model += 'real_mobilenets_ssd_38k_epochs_frozen_inference_graph.pb'
+           self.path_to_model += 'frozen_inference_graph_real.pb'
         else:
-           self.path_to_model += 'sim_mobilenets_ssd_30k_epochs_frozen_inference_graph.pb'
+           self.path_to_model += 'frozen_inference_graph_sim.pb'
         rospy.loginfo('model going to be loaded from '+self.path_to_model)
 
         # load the graph using the path to model file
