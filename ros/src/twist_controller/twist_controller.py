@@ -39,12 +39,12 @@ class Controller(object):
         # Return throttle, brake, steer
         if not dbw_enabled:
             self.throttle_controller.reset()
-            return 0., 0., 0.
+            return 0.,0.,0.
 
         current_vel = self.vel_lpf.filt(current_vel)
 
         steering = self.yaw_controller.get_steering(linear_vel, angular_vel, current_vel)
-        #steering = self.vel_lpf.filt(steering)
+
         vel_error = linear_vel - current_vel
         self.last_vel = current_vel
 
@@ -53,19 +53,16 @@ class Controller(object):
         self.last_time = current_time
 
         throttle = self.throttle_controller.step(vel_error, sample_time)
-        #throttle = self.vel_lpf.filt(throttle)
         brake = 0
 
-        if throttle > 0:
-            brake = 0.0
-        else:
-            throttle = 0.0
-            if throttle > self.brake_deadband:
-                brake = 0.0
-            else:
-                #decel = max(vel_error, self.decel_limit)
-                #brake = abs(decel)*self.vehicle_mass*self.wheel_radius
-                brake = -throttle * self.full_mass * self.wheel_radius
+        if linear_vel == 0. and current_vel < 0.1:
+            throttle = 0
+            brake = 700 # N*m to hold car in place if we are stopped at light. Acc - 1m/s^2
+
+        elif throttle < .1 and vel_error < 0:
+            throttle = 0
+            decel = max(vel_error, self.decel_limit)
+            brake = abs(decel)*self.vehicle_mass*self.wheel_radius # Torque N*m
 
         return throttle, brake, steering
         #return 1., 0., 0.
