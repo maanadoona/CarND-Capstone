@@ -22,7 +22,7 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 100 # Number of waypoints we will publish. You can change this number
 MAX_DECEL = .5
 
 class WaypointUpdater(object):
@@ -68,7 +68,7 @@ class WaypointUpdater(object):
         prev_vect = np.array(prev_coord)
         pos_vect = np.array([x, y])
 
-        val = np.dot(cl_vect.prev_vect, pos_vect.cl_vect)
+        val = np.dot(cl_vect - prev_vect, pos_vect - cl_vect)
 
         if val > 0:
             closest_idx = (closest_idx + 1) % len(self.waypoints_2d)
