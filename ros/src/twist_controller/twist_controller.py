@@ -20,8 +20,8 @@ class Controller(object):
         mx = 0.2 # maximum throttle value
         self.throttle_controller = PID(kp, ki, kd, mn, mx)
 
-        tau = 1.0#0.5
-        ts = 1.0#.02
+        tau = 0.5
+        ts = 0.5#.02
         self.vel_lpf = LowPassFilter(tau, ts)
 
         self.vehicle_mass = vehicle_mass
