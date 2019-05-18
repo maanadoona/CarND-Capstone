@@ -28,7 +28,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 100 # Number of waypoints we will publish. You can change this number
-MAX_DECEL = .5
+MAX_DECEL = 1.0
 NO_CAMERA_YET = -2
 NO_RED = -1
 
