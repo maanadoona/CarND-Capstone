@@ -83,6 +83,7 @@ class WaypointUpdater(object):
         if self.track_waypoint_count == -1:
             return        
         final_lane = self.generate_lane()
+        rospy.loginfo("Final waypoint: {}".format(final_lane))
         self.final_waypoints_pub.publish(final_lane)
 
     def generate_lane(self):
