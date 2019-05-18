@@ -56,14 +56,15 @@ class Controller(object):
         #throttle = self.vel_lpf.filt(throttle)
         brake = 0
 
-        if linear_vel == 0. and current_vel < 0.1:
-            throttle = 0
-            brake = 400
-
-        elif throttle < .1 and vel_error < 0:
-            throttle = 0
-            decel = max(vel_error, self.decel_limit)
-            brake = abs(decel)*self.vehicle_mass*self.wheel_radius
+        if throttle > 0:
+            brake = 0.0
+        else:
+            throttle = 0.0
+            if throttle > self.brake_deadband:
+                brake = 0.0
+            else:
+                decel = max(vel_error, self.decel_limit)
+                brake = abs(decel)*self.vehicle_mass*self.wheel_radius
 
         return throttle, brake, steering
         #return 1., 0., 0.
