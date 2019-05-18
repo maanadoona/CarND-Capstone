@@ -16,7 +16,7 @@ import calendar
 import time
 
 
-STATE_COUNT_THRESHOLD = 1
+STATE_COUNT_THRESHOLD = 2
 
 
 class TLDetector(object):

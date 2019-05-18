@@ -27,7 +27,7 @@ class TLClassifier(object):
         self.detection_classes = None
         self.label_map = None
         self.category_index = None
-        self.MIN_SCORE_THRESHOLD = 0.40
+        self.MIN_SCORE_THRESHOLD = 0.4
         self.NUM_CLASSES = 4
 
         CLASSIFIER_BASE = os.path.dirname(os.path.realpath(__file__))
