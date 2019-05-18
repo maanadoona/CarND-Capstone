@@ -63,8 +63,9 @@ class Controller(object):
             if throttle > self.brake_deadband:
                 brake = 0.0
             else:
-                decel = max(vel_error, self.decel_limit)
-                brake = abs(decel)*self.vehicle_mass*self.wheel_radius
+                #decel = max(vel_error, self.decel_limit)
+                #brake = abs(decel)*self.vehicle_mass*self.wheel_radius
+                brake = -throttle * self.full_mass * self.wheel_radius
 
         return throttle, brake, steering
         #return 1., 0., 0.
