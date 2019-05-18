@@ -9,18 +9,32 @@ class PID(object):
         self.kp = kp
         self.ki = ki
         self.kd = kd
-        self.min = mn
-        self.max = mx
 
-        self.int_val = self.last_int_val = self.last_error = 0.
+        self.diff = 0.0
+        self.int_cte = 0.0
+        self.prev_cte = 0.0
+        self.steer = 0.0
 
     def reset(self):
-        self.int_val = 0.0
-        self.last_int_val = 0.0
+        self.int_cte = 0.0
+        self.prev_cte = 0.0
 
     def step(self, error, sample_time):
-        self.last_int_val = self.int_val
+        self.diff = self.error - self.prev_cte
+        self.int_cte += error
 
+        self.steer = -self.kp*error - self.kd*self.diff - self.ki*self.int_cte
+
+        self.prev_cte = error
+
+        if self.steer > 1:
+            self.steer = 1
+
+        if self.steer < -1:
+            self.steer = -1
+
+        return self.steer
+        '''
         integral = self.int_val + error * sample_time;
         derivative = (error - self.last_error) / sample_time if sample_time > 0  else 0;
 
@@ -36,3 +50,4 @@ class PID(object):
         self.last_error = error
 
         return val
+        '''
