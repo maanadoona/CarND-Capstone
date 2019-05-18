@@ -44,6 +44,7 @@ class Controller(object):
         current_vel = self.vel_lpf.filt(current_vel)
 
         steering = self.yaw_controller.get_steering(linear_vel, angular_vel, current_vel)
+        steering = self.vel_lpf.filt(steering)
         vel_error = linear_vel - current_vel
         self.last_vel = current_vel
 
@@ -52,7 +53,7 @@ class Controller(object):
         self.last_time = current_time
 
         throttle = self.throttle_controller.step(vel_error, sample_time)
-        throttle = self.vel_lpf.filt(throttle)
+        #throttle = self.vel_lpf.filt(throttle)
         brake = 0
 
         if linear_vel == 0. and current_vel < 0.1:
