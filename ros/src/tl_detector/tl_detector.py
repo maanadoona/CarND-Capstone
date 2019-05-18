@@ -16,8 +16,8 @@ import calendar
 import time
 
 
-STATE_COUNT_THRESHOLD = 2
-GENERATE_TRAIN_IMGS = False
+STATE_COUNT_THRESHOLD = 1
+
 
 class TLDetector(object):
     def __init__(self):
