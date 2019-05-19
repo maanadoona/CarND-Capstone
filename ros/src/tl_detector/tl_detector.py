@@ -119,10 +119,7 @@ class TLDetector(object):
             int: index of the closest waypoint in self.base_waypoints
 
         """
-        # Assumes waypoint_tree (KDTree) is already created in waypoint_cb()
         closest_wp_indx = self.waypoint_tree.query([x, y], 1)[1]
-        #rospy.loginfo('Closest waypoint index to car position (%s, %s): (%s)',
-        #                x, y, closest_wp_indx)
 
         return closest_wp_indx
 
@@ -136,16 +133,10 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, 'rgb8')
         classified_state = self.light_classifier.get_classification(cv_image)
 
-        if self.is_simulator:
-            rospy.loginfo("Sim ground truth state: {}".format(
-                self.light_label(light.state)))
-
-        rospy.loginfo("Classified state:       {}".format(
-            self.light_label(classified_state)))
+        rospy.loginfo("Traffic light: {}".format(self.light_label(classified_state)))
 
         return classified_state
 
@@ -176,8 +167,6 @@ class TLDetector(object):
             car_wp_indx = self.get_closest_waypoint(self.pose.pose.position.x,
                                                     self.pose.pose.position.y)
 
-        #rospy.loginfo("== process_traffic_lights() ==================")
-        #Find the closest visible traffic light (if one exists)
         indx_dist = len(self.waypoints.waypoints)
         for i, light in enumerate(self.lights):
             # Get stop line waypoint index
@@ -187,8 +176,6 @@ class TLDetector(object):
             # Find the closest stop line waypoint index
             d = wp_indx - car_wp_indx
 
-            #rospy.loginfo("light: {}, car_wp_indx: {}, wp_indx: {}, d: {}".format(
-            #    i, car_wp_indx, wp_indx, d))
             if d >= 0 and d < indx_dist:
                 indx_dist = d
                 closest_upcoming_light = light
@@ -196,7 +183,7 @@ class TLDetector(object):
 
         if closest_upcoming_light:
             state = self.get_light_state(closest_upcoming_light)
-            rospy.loginfo(">> closest stop_line_wp_indx: {}, state: {}".format(
+            rospy.loginfo("Closest WayPoint: {}, state: {}".format(
                 stop_line_wp_indx, self.light_label(state)))
 
             return stop_line_wp_indx, state

@@ -17,7 +17,6 @@ class TLClassifier(object):
         self.config = yaml.safe_load(config_string)
         self.img_width = self.config['camera_info']['image_width']
         self.img_height = self.config['camera_info']['image_height']
-        #rospy.loginfo("width: {} height: {}".format(self.img_width, self.img_height))
         self.is_real = self.config['is_site']
 
         self.detection_graph = None
@@ -31,21 +30,13 @@ class TLClassifier(object):
         self.NUM_CLASSES = 4
 
         CLASSIFIER_BASE = os.path.dirname(os.path.realpath(__file__))
-        #GRAPH = 'frozen_inference_graph.pb'
-        GRAPH = 'quantized_optimized_inference_graph.pb'
 
         if self.is_real:
-            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_real'
-            rospy.loginfo("In real site environment...use {}/{}".format(
-                MODEL_NAME, GRAPH))
+            PATH_TO_CKPT = CLASSIFIER_BASE + '/train_model/frozen_inference_graph_real.pb'
+            PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
         else:
-            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_sim'
-            rospy.loginfo("In simulator environment...use {}/{}".format(
-                MODEL_NAME, GRAPH))
-
-        PATH_TO_CKPT = CLASSIFIER_BASE + '/' + MODEL_NAME + '/' + GRAPH
-        PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
-
+            PATH_TO_CKPT = CLASSIFIER_BASE + '/train_model/frozen_inference_graph_sim.pb'
+            PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
 
         ### Load Tensorflow model graph
         self.detection_graph = tf.Graph()
@@ -116,9 +107,6 @@ class TLClassifier(object):
         det_scores = { "Green": 0, "Red": 0, "Yellow": 0, "Unknown": 0}
 
         det_count = 0
-        #rospy.loginfo("num_detections: {}, detection_boxes: {}".format(
-        #    self.num_detections, self.detection_boxes.shape[0]
-        #))
 
         for i in range(0, self.num_detections):
             if self.detection_scores is not None:
