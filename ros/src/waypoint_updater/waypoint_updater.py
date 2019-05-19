@@ -5,12 +5,13 @@ from std_msgs.msg import Int32
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Quaternion
 from styx_msgs.msg import Lane, Waypoint
+from std_msgs.msg import Int32
+from scipy.spatial import KDTree
 
 import math
 import tf
 import numpy as np
-
-from enum import Enum
+import math
 
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
