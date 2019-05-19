@@ -25,7 +25,6 @@ CONSTANT_DECEL = 1 / LOOKAHEAD_WPS  # Deceleration constant for smoother braking
 PUBLISHING_RATE = 10  # Rate (Hz) of waypoint publishing
 STOP_LINE_MARGIN = 3  # Distance in waypoints to pad in front of the stop line
 MAX_DECEL = 0.5
-LOGGING_THROTTLE_FACTOR = PUBLISHING_RATE * 2  # Only log at this rate (1 / Hz)
 
 
 class WaypointUpdater(object):
@@ -39,8 +38,8 @@ class WaypointUpdater(object):
         self.waypoint_tree = None
         self.decelerate_count = 0
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)#, queue_size=2)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)#, queue_size=8)
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=2)
+        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=8)
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
