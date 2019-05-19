@@ -72,18 +72,36 @@ class WaypointUpdater(object):
         # rospy.logwarn("closest_idx={}".format(closest_idx))
         return closest_idx
 
-    def publish_waypoints(self):
-        final_lane = self.generate_lane()
-        self.final_waypoints_pub.publish(final_lane)
+        def publish_waypoints(self):
+            if self.track_waypoint_count == -1:
+                return
+            final_lane = self.generate_lane()
+            self.final_waypoints_pub.publish(final_lane)
 
-    def generate_lane(self):
-        lane = Lane()
+        def generate_lane(self):
+            lane = Lane()
 
-        closest_idx = self.get_closest_waypoint_idx()
-        farthest_idx = closest_idx + LOOKAHEAD_WPS
-        base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
+            closest_idx = self.get_closest_waypoint_idx()
+            farthest_idx = closest_idx + LOOKAHEAD_WPS
+            base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
 
-        if (self.stopline_wp_idx == -1) or (self.stopline_wp_idx >= farthest_idx):
+            if farthest_idx < self.track_waypoint_count:
+                base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
+            # rospy.logfatal('\nNormal closest_idx: %d, farthest_idx:%d, length of self.base_lane.waypoints :%d', closest_idx, farthest_idx, len(base_waypoints))
+
+            else:
+                rospy.logfatal("WP lookahead passed end of track!!!")
+                offset = farthest_idx - self.track_waypoint_count
+                farthest_idx = self.track_waypoint_count - 2
+                base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
+
+                base_waypoints = base_waypoints + self.base_lane.waypoints[0:offset]
+                # rospy.logfatal('\nError! closest_idx: %d, farthest_idx:%d, length of self.base_lane.waypoints :%d', closest_idx, farthest_idx, len(base_waypoints))
+
+        if (self.stopline_wp_idx == -1):
+            lane.waypoints = base_waypoints
+        elif (self.stopline_wp_idx >= farthest_idx):
+            # rospy.logfatal('\nsdevikar: Stop light detected,but out of range')
             lane.waypoints = base_waypoints
         else:
             lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
