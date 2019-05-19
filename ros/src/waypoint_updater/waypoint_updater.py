@@ -1,145 +1,199 @@
 #!/usr/bin/env python
 
 import rospy
-from geometry_msgs.msg import PoseStamped
-from styx_msgs.msg import Lane, Waypoint
 from std_msgs.msg import Int32
-from scipy.spatial import KDTree
+from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Quaternion
+from styx_msgs.msg import Lane, Waypoint
 
-import numpy as np
 import math
+import tf
+import numpy as np
+
+from enum import Enum
 
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
+
 As mentioned in the doc, you should ideally first implement a version which does not care
 about traffic lights or obstacles.
+
 Once you have created dbw_node, you will update this node to use the status of traffic lights too.
+
 Please note that our simulator also provides the exact location of traffic lights and their
 current status in `/vehicle/traffic_lights` message. You can use this message to build this node
 as well as to verify your TL classifier.
+
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-#LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-LOOKAHEAD_WPS = 100 # Number of waypoints we will publish. You can change this number
-MAX_DECEL = .5
+MAX_DECEL = 1.0
+LOOKAHEAD_WPS = 80  # Number of waypoints we will publish. You can change this number
+
+NO_CAMERA_YET = -2
+NO_RED = -1
+
+LOOP_RATE = 2
+
+SLOW_START_SPEED = 2.0
+
+
+class State(Enum):
+    NoCameraYet = 0
+    SlowStart = 1
+    Going = 2
+    Stopping = 3
+    EndOfSlowStart = 4
+
 
 class WaypointUpdater(object):
+
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-        # TODO: Add other member variables you need below
-        self.base_lane = None
-        self.pose = None
-        self.stopline_wp_idx  = -1
-        self.waypoints_2d = None
-        self.waypoint_tree = None
-        self.track_waypoint_count = -1
-
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+
+        # Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
+        self.base_waypoints = None
+        self.current_pose = None
+        self.light_wp = NO_CAMERA_YET
+        self.state = State.NoCameraYet
+
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(30)
+        rate = rospy.Rate(LOOP_RATE)  # 10 # 40 # Hz
+
         while not rospy.is_shutdown():
-            if self.pose and self.base_lane:
-                self.publish_waypoints()
+            if self.current_pose and self.base_waypoints:
+                next = self.get_next_waypoint()
+                lane = Lane()
+                lane.header.frame_id = '/world'
+                lane.header.stamp = rospy.Time(0)
+                # lane.waypoints = self.just_go(next)
+
+                if self.light_wp == NO_CAMERA_YET:  # no camera
+                    self.state = State.NoCameraYet
+                    lane.waypoints = self.no_go()
+
+                elif self.light_wp == NO_RED:  # free to go
+                    self.state = State.Going
+                    lane.waypoints = self.just_go(next)
+
+                else:  # red light found
+                    if self.state == State.NoCameraYet or self.state == State.SlowStart:  # slow starting, with camera
+                        self.state = State.SlowStart  # slow-start
+                        lane.waypoints = self.slow_down(next, self.light_wp, slow_start=True)
+                        if len(lane.waypoints) <= 0:
+                            self.state = State.EndOfSlowStart
+
+                    elif self.state == State.EndOfSlowStart:  # end of slow start
+                        self.state = State.EndOfSlowStart
+                        lane.waypoints = self.no_go()
+
+                    elif next < self.light_wp:  # going or stopping, and did not reach stop line yet
+                        self.state = State.Stopping  # stopping
+                        lane.waypoints = self.slow_down(next, self.light_wp)
+
+                    elif self.state == State.Stopping:  # stopping already, doing nothing
+                        self.state = State.Stopping
+                        lane.waypoints = self.no_go()
+
+                    else:  # going past red light: apparently a sudden switch right under the light, continuing going
+                        self.state = State.Going
+                        lane.waypoints = self.just_go(next)
+
+                self.final_waypoints_pub.publish(lane)
+                print(self.state)
+
             rate.sleep()
 
-    def get_closest_waypoint_idx(self):
-        x = self.pose.pose.position.x
-        y = self.pose.pose.position.y
-        closest_idx = self.waypoint_tree.query([x, y], 1)[1]
+    def decelerate(self, waypoints):
+        last = waypoints[-1]
+        last.twist.twist.linear.x = 0.
+        for wp in waypoints[:-1][::-1]:
+            dist = self.distance(wp.pose.pose.position, last.pose.pose.position)
+            vel = math.sqrt(2 * MAX_DECEL * dist)
+            if vel < 1.:
+                vel = 0.
+            wp.twist.twist.linear.x = min(vel, wp.twist.twist.linear.x)
+        return waypoints
 
-        # Check if closest is ahead or behind vehicle
-        closest_coord = self.waypoints_2d[closest_idx]
-        prev_coord = self.waypoints_2d[closest_idx - 1]
+    # ACTIONS
+    def no_go(self):
+        return []
 
-        # Equation for hyperplane through closest_coords
-        cl_vect = np.array(closest_coord)
-        prev_vect = np.array(prev_coord)
-        pos_vect = np.array([x, y])
+    def just_go(self, next):
+        return self.base_waypoints[next: next + LOOKAHEAD_WPS]
 
-        val = np.dot(cl_vect - prev_vect, pos_vect - cl_vect)
+    def slow_down(self, next, down_to, slow_start=False):
+        stopping_waypoints = []
 
-        if val > 0:
-            closest_idx = (closest_idx + 1) % len(self.waypoints_2d)
-        # rospy.logwarn("closest_idx={}".format(closest_idx))
-        return closest_idx
+        if next < down_to:
+            for wp in self.base_waypoints[next: down_to + 1]:
+                p = Waypoint()
+                wp_pose = wp.pose.pose
+                p.pose.pose.position.x = wp_pose.position.x
+                p.pose.pose.position.y = wp_pose.position.y
+                p.pose.pose.position.z = wp_pose.position.z
 
-        def publish_waypoints(self):
-            if self.track_waypoint_count == -1:
-                return
-            final_lane = self.generate_lane()
-            self.final_waypoints_pub.publish(final_lane)
+                q = self.quaternion_from_yaw(0.0)
+                p.pose.pose.orientation = Quaternion(*q)
 
-        def generate_lane(self):
-            lane = Lane()
+                p.twist.twist.linear.x = SLOW_START_SPEED if slow_start else wp.twist.twist.linear.x
+                stopping_waypoints.append(p)
 
-            closest_idx = self.get_closest_waypoint_idx()
-            farthest_idx = closest_idx + LOOKAHEAD_WPS
-            base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
+        return self.decelerate(stopping_waypoints) if len(stopping_waypoints) > 0 else []
 
-            if farthest_idx < self.track_waypoint_count:
-                base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
-            # rospy.logfatal('\nNormal closest_idx: %d, farthest_idx:%d, length of self.base_lane.waypoints :%d', closest_idx, farthest_idx, len(base_waypoints))
+    def distance_sq(self, p1, p2):
+        x, y, z = p1.x - p2.x, p1.y - p2.y, p1.z - p2.z
+        return x * x + y * y + z * z
 
-            else:
-                rospy.logfatal("WP lookahead passed end of track!!!")
-                offset = farthest_idx - self.track_waypoint_count
-                farthest_idx = self.track_waypoint_count - 2
-                base_waypoints = self.base_lane.waypoints[closest_idx:farthest_idx]
+    def get_closest_waypoint(self):
+        self_pos = self.current_pose.pose.position
+        distances = np.array(
+            [self.distance_sq(self_pos, way_pos.pose.pose.position) for way_pos in self.base_waypoints])
+        return np.argmin(distances)
 
-                base_waypoints = base_waypoints + self.base_lane.waypoints[0:offset]
-                # rospy.logfatal('\nError! closest_idx: %d, farthest_idx:%d, length of self.base_lane.waypoints :%d', closest_idx, farthest_idx, len(base_waypoints))
+    # https://answers.ros.org/question/69754/quaternion-transformations-in-python/
+    def quaternion_from_yaw(self, yaw):
+        return tf.transformations.quaternion_from_euler(0., 0., yaw)
 
-        if (self.stopline_wp_idx == -1):
-            lane.waypoints = base_waypoints
-        elif (self.stopline_wp_idx >= farthest_idx):
-            # rospy.logfatal('\nsdevikar: Stop light detected,but out of range')
-            lane.waypoints = base_waypoints
-        else:
-            lane.waypoints = self.decelerate_waypoints(base_waypoints, closest_idx)
+    def yaw_from_quaternion(self, quaternion):
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+        return euler[2]
 
-        return lane
+    def get_next_waypoint(self):
+        closest = self.get_closest_waypoint()
 
-    def decelerate_waypoints(self, waypoints, closest_idx):
-        temp = []
-        for i, wp in enumerate(waypoints):
+        orientation = self.current_pose.pose.orientation
+        self_pos = self.current_pose.pose.position
+        way_pos = self.base_waypoints[closest].pose.pose.position
 
-            p = Waypoint()
-            p.pose = wp.pose
+        heading = math.atan2((way_pos.y - self_pos.y), (way_pos.x - self_pos.x))
+        yaw = self.yaw_from_quaternion((orientation.x, orientation.y, orientation.z, orientation.w))
+        angle = abs(yaw - heading);
 
-            # Distance includes a number of waypoints back so front of car stops at line
-            stop_idx = max(self.stopline_wp_idx - closest_idx - 3, 0)
-            dist = self.distance(waypoints, i, stop_idx)
-            vel = math.sqrt(2 * MAX_DECEL * dist) + (i * CONSTANT_DECEL)
-            if vel < 1.0:
-                vel = 0.0
+        if (angle > math.pi / 4):
+            return closest + 1
 
-            p.twist.twist.linear.x = min(vel, wp.twist.twist.linear.x)
-            temp.append(p)
-
-        return temp
+        return closest
 
     def pose_cb(self, msg):
-        self.pose = msg
+        self.current_pose = msg
+        pass
 
-    def waypoints_cb(self, waypoints):
-        self.base_lane = waypoints
-        if not self.waypoints_2d:
-            self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in
-                                 waypoints.waypoints]
-            self.waypoint_tree = KDTree(self.waypoints_2d)
+    def waypoints_cb(self, msg):
+        self.base_waypoints = msg.waypoints;
+        pass
 
     def traffic_cb(self, msg):
-        rospy.logwarn("LIGHT: new stopline_wp_idx={}, old stopline_wp_idx={}".format(msg.data, self.stopline_wp_idx))
-        self.stopline_wp_idx = msg.data
+        self.light_wp = msg.data
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
@@ -151,13 +205,10 @@ class WaypointUpdater(object):
     def set_waypoint_velocity(self, waypoints, waypoint, velocity):
         waypoints[waypoint].twist.twist.linear.x = velocity
 
-    def distance(self, waypoints, wp1, wp2):
-        dist = 0
-        dl = lambda a, b: math.sqrt(pow((a.x - b.x), 2) + pow((a.y - b.y), 2) + pow((a.z - b.z), 2))
-        for i in range(wp1, wp2 + 1):
-            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
-            wp1 = i
-        return dist
+    def distance(self, p1, p2):
+        x, y, z = p1.x - p2.x, p1.y - p2.y, p1.z - p2.z
+        return math.sqrt(x * x + y * y + z * z)
+
 
 if __name__ == '__main__':
     try:
