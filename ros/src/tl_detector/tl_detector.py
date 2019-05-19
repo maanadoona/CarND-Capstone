@@ -99,10 +99,6 @@ class TLDetector(object):
         elif self.state_count >= STATE_COUNT_THRESHOLD:
             self.last_state = self.state
 
-            if GENERATE_TRAIN_IMGS:
-                # Store images and state for training data for simulator
-                self.create_training_data(state)
-
             light_wp = light_wp if state == TrafficLight.RED else -1
             self.last_wp = light_wp
             print(("light_wp", light_wp, "car_wp:", self.car_wp))
