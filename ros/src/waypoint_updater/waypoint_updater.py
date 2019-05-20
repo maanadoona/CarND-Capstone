@@ -22,8 +22,6 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 
 LOOKAHEAD_WPS = 50  # Number of waypoints we will publish.
 CONSTANT_DECEL = 1 / LOOKAHEAD_WPS  # Deceleration constant for smoother braking
-PUBLISHING_RATE = 20  # Rate (Hz) of waypoint publishing
-STOP_LINE_MARGIN = 4  # Distance in waypoints to pad in front of the stop line
 MAX_DECEL = 0.5
 
 
@@ -47,7 +45,7 @@ class WaypointUpdater(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(PUBLISHING_RATE)
+        rate = rospy.Rate(20)
         while not rospy.is_shutdown():
             if self.pose and self.base_lane:
                 self.publish_waypoints()
@@ -100,9 +98,9 @@ class WaypointUpdater(object):
             p.pose = wp.pose
 
             # Distance includes a number of waypoints back so front of car stops at line
-            stop_idx = max(self.stopline_wp_idx - closest_idx - STOP_LINE_MARGIN, 0)
+            stop_idx = max(self.stopline_wp_idx - closest_idx - 3, 0)
             dist = self.distance(waypoints, i, stop_idx)
-            vel = math.sqrt(2 * MAX_DECEL * dist) + (i * CONSTANT_DECEL)
+            vel = math.sqrt(2 * MAX_DECEL * dist)# + (i * CONSTANT_DECEL)
             if vel < 1.0:
                 vel = 0.0
 
