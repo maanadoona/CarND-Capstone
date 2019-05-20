@@ -30,13 +30,20 @@ class TLClassifier(object):
         self.NUM_CLASSES = 4
 
         CLASSIFIER_BASE = os.path.dirname(os.path.realpath(__file__))
+        #GRAPH = 'frozen_inference_graph.pb'
+        GRAPH = 'quantized_optimized_inference_graph.pb'
 
         if self.is_real:
-            PATH_TO_CKPT = CLASSIFIER_BASE + '/train_model/frozen_inference_graph_real.pb'
-            PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
+            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_real'
+            rospy.loginfo("In real site environment...use {}/{}".format(
+                MODEL_NAME, GRAPH))
         else:
-            PATH_TO_CKPT = CLASSIFIER_BASE + '/train_model/frozen_inference_graph_sim.pb'
-            PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
+            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_sim'
+            rospy.loginfo("In simulator environment...use {}/{}".format(
+                MODEL_NAME, GRAPH))
+
+        PATH_TO_CKPT = CLASSIFIER_BASE + '/' + MODEL_NAME + '/' + GRAPH
+        PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
 
         ### Load Tensorflow model graph
         self.detection_graph = tf.Graph()
@@ -128,9 +135,9 @@ class TLClassifier(object):
                 max_det_score = det_scores[key]
                 max_det_state = key
 
-        rospy.loginfo(det_scores)
-        rospy.loginfo("Predicted state: {}   Normalized score: {}".format(
-            max_det_state, max_det_score))
+        #rospy.loginfo(det_scores)
+        #rospy.loginfo("Predicted state: {}   Normalized score: {}".format(
+        #    max_det_state, max_det_score))
         return max_det_state
 
     def get_classification(self, image):
@@ -148,7 +155,7 @@ class TLClassifier(object):
         ### Detect traffic lights ###
         start_t = time.time()
         self.run_inference_for_single_image(image_np)
-        rospy.loginfo('Inference time: {}s'.format(time.time() - start_t))
+        #rospy.loginfo('Inference time: {}s'.format(time.time() - start_t))
 
         predicted_state = self.predict_state()
 
