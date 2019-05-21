@@ -51,7 +51,7 @@ class Controller(object):
         self.last_time = current_time
 
         throttle = self.throttle_controller.step(vel_error, sample_time)
-        throttle = self.vel_lpf(throttle)
+        #throttle = self.vel_lpf(throttle)
         brake = 0
 
         if throttle > self.brake_deadband:
