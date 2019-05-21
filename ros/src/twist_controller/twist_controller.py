@@ -39,10 +39,6 @@ class Controller(object):
             self.throttle_controller.reset()
             return 0.,0.,0.
 
-        #current_vel = self.vel_lpf.filt(current_vel)
-        steering = self.yaw_controller.get_steering(linear_vel, angular_vel, current_vel)
-        steering = self.vel_lpf.filt(steer)
-
         vel_error = linear_vel - current_vel
         self.last_vel = current_vel
 
@@ -50,14 +46,22 @@ class Controller(object):
         sample_time = current_time - self.last_time
         self.last_time = current_time
 
-        throttle = self.throttle_controller.step(vel_error, sample_time)
-        #throttle = self.vel_lpf(throttle)
-        brake = 0
+        acceleration = self.throttle_controller.step(vel_error, sample_time)
+        acceleration = self.vel_lpf(acceleration)
 
-        if throttle > self.brake_deadband:
-            brake = 0.0
+        if throttle > 0.0:
+            throttle = acceleration
+            brake = 0
         else:
-            brake = -throttle*self.full_mass*self.wheel_radius
+            throttle
+            if acceleration > self.brake_deadband:
+                brake = 0.0
+            else:
+                brake = -acceleration*self.full_mass*self.wheel_radius
+
+        #current_vel = self.vel_lpf.filt(current_vel)
+        steering = self.yaw_controller.get_steering(linear_vel, angular_vel, current_vel)
+        steering = self.vel_lpf.filt(steer)
 
         return throttle, brake, steering
 
