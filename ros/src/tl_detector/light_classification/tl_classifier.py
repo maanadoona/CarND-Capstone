@@ -17,6 +17,7 @@ class TLClassifier(object):
         self.config = yaml.safe_load(config_string)
         self.img_width = self.config['camera_info']['image_width']
         self.img_height = self.config['camera_info']['image_height']
+        #rospy.loginfo("width: {} height: {}".format(self.img_width, self.img_height))
         self.is_real = self.config['is_site']
 
         self.detection_graph = None
@@ -44,6 +45,7 @@ class TLClassifier(object):
 
         PATH_TO_CKPT = CLASSIFIER_BASE + '/' + MODEL_NAME + '/' + GRAPH
         PATH_TO_LABELS = CLASSIFIER_BASE + '/label_map.pbtxt'
+
 
         ### Load Tensorflow model graph
         self.detection_graph = tf.Graph()
@@ -114,6 +116,9 @@ class TLClassifier(object):
         det_scores = { "Green": 0, "Red": 0, "Yellow": 0, "Unknown": 0}
 
         det_count = 0
+        #rospy.loginfo("num_detections: {}, detection_boxes: {}".format(
+        #    self.num_detections, self.detection_boxes.shape[0]
+        #))
 
         for i in range(0, self.num_detections):
             if self.detection_scores is not None:
@@ -135,9 +140,9 @@ class TLClassifier(object):
                 max_det_score = det_scores[key]
                 max_det_state = key
 
-        #rospy.loginfo(det_scores)
-        #rospy.loginfo("Predicted state: {}   Normalized score: {}".format(
-        #    max_det_state, max_det_score))
+        rospy.loginfo(det_scores)
+        rospy.loginfo("Predicted state: {}   Normalized score: {}".format(
+            max_det_state, max_det_score))
         return max_det_state
 
     def get_classification(self, image):
@@ -155,7 +160,7 @@ class TLClassifier(object):
         ### Detect traffic lights ###
         start_t = time.time()
         self.run_inference_for_single_image(image_np)
-        #rospy.loginfo('Inference time: {}s'.format(time.time() - start_t))
+        rospy.loginfo('Inference time: {}s'.format(time.time() - start_t))
 
         predicted_state = self.predict_state()
 

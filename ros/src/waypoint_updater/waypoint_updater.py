@@ -22,7 +22,10 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 
 LOOKAHEAD_WPS = 50  # Number of waypoints we will publish.
 CONSTANT_DECEL = 1 / LOOKAHEAD_WPS  # Deceleration constant for smoother braking
+PUBLISHING_RATE = 10  # Rate (Hz) of waypoint publishing
+STOP_LINE_MARGIN = 3  # Distance in waypoints to pad in front of the stop line
 MAX_DECEL = 0.5
+LOGGING_THROTTLE_FACTOR = PUBLISHING_RATE * 2  # Only log at this rate (1 / Hz)
 
 
 class WaypointUpdater(object):
@@ -36,8 +39,8 @@ class WaypointUpdater(object):
         self.waypoint_tree = None
         self.decelerate_count = 0
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=2)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=8)
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)#, queue_size=2)
+        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)#, queue_size=8)
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
@@ -45,7 +48,7 @@ class WaypointUpdater(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(20)
+        rate = rospy.Rate(PUBLISHING_RATE)
         while not rospy.is_shutdown():
             if self.pose and self.base_lane:
                 self.publish_waypoints()
@@ -100,7 +103,7 @@ class WaypointUpdater(object):
             # Distance includes a number of waypoints back so front of car stops at line
             stop_idx = max(self.stopline_wp_idx - closest_idx - 3, 0)
             dist = self.distance(waypoints, i, stop_idx)
-            vel = math.sqrt(2 * MAX_DECEL * dist)# + (i * CONSTANT_DECEL)
+            vel = math.sqrt(2 * MAX_DECEL * dist) + (i * CONSTANT_DECEL)
             if vel < 1.0:
                 vel = 0.0
 
@@ -152,4 +155,3 @@ if __name__ == '__main__':
         WaypointUpdater()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start waypoint updater node.')
-        
