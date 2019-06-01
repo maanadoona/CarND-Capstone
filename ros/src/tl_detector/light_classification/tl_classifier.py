@@ -9,7 +9,7 @@ import cv2
 import yaml
 
 from utils import label_map_util
-from utils import visualization_utils as vis_util
+#from utils import visualization_utils as vis_util
 
 class TLClassifier(object):
     def __init__(self):
@@ -31,15 +31,15 @@ class TLClassifier(object):
         self.NUM_CLASSES = 4
 
         CLASSIFIER_BASE = os.path.dirname(os.path.realpath(__file__))
-        #GRAPH = 'frozen_inference_graph.pb'
-        GRAPH = 'quantized_optimized_inference_graph.pb'
-
+        #GRAPH = 'frozen_inference_graph.pb'        
+        MODEL_NAME = 'train_model'
+        
         if self.is_real:
-            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_real'
+            GRAPH = 'frozen_inference_graph_real.pb'    
             rospy.loginfo("In real site environment...use {}/{}".format(
                 MODEL_NAME, GRAPH))
         else:
-            MODEL_NAME = 'ssd_inception_v2_coco_ud_capstone_sim'
+            GRAPH = 'frozen_inference_graph_sim.pb' 
             rospy.loginfo("In simulator environment...use {}/{}".format(
                 MODEL_NAME, GRAPH))
 
