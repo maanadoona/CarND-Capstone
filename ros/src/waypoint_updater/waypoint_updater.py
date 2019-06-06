@@ -20,7 +20,7 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 50  # Number of waypoints we will publish.
+LOOKAHEAD_WPS = 200  # Number of waypoints we will publish.
 CONSTANT_DECEL = 1 / LOOKAHEAD_WPS  # Deceleration constant for smoother braking
 PUBLISHING_RATE = 10  # Rate (Hz) of waypoint publishing
 STOP_LINE_MARGIN = 3  # Distance in waypoints to pad in front of the stop line

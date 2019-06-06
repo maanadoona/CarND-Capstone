@@ -1,19 +1,19 @@
 item {
 	id: 1
-	name: 'Green'
+	name: 'red'
 }
 
 item {
 	id: 2
-	name: 'Red'
+	name: 'yellow'
 }
 
 item {
 	id: 3
-	name: 'Yellow'
+	name: 'green'
 }
 
 item {
 	id: 4
-	name: 'Unknown'
+	name: 'unknown'
 }

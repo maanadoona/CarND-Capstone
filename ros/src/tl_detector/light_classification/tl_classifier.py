@@ -8,7 +8,7 @@ import calendar
 import cv2
 import yaml
 
-from utils import label_map_util
+#from utils import label_map_util
 #from utils import visualization_utils as vis_util
 
 class TLClassifier(object):
@@ -57,10 +57,10 @@ class TLClassifier(object):
                 tf.import_graph_def(od_graph_def, name='')
 
         ### Load label map
-        self.label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
-        categories = label_map_util.convert_label_map_to_categories(self.label_map,
-            max_num_classes=self.NUM_CLASSES, use_display_name=True)
-        self.category_index = label_map_util.create_category_index(categories)
+        #self.label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
+        #categories = label_map_util.convert_label_map_to_categories(self.label_map,
+        #    max_num_classes=self.NUM_CLASSES, use_display_name=True)
+        #self.category_index = label_map_util.create_category_index(categories)
 
 
     def run_inference_for_single_image(self, image):
@@ -113,7 +113,8 @@ class TLClassifier(object):
             - Predicted classified state is the state with the highest
               normalized score.
         """
-        det_scores = { "Green": 0, "Red": 0, "Yellow": 0, "Unknown": 0}
+        det_scores = { "green": 0, "red": 0, "yellow": 0, "unknown": 0}
+        det_class = ["red", "yellow", "green", "unknown"]
 
         det_count = 0
         #rospy.loginfo("num_detections: {}, detection_boxes: {}".format(
@@ -124,9 +125,9 @@ class TLClassifier(object):
             if self.detection_scores is not None:
                 det_score = self.detection_scores[i]
                 if det_score > self.MIN_SCORE_THRESHOLD:
-                    det_state = self.detection_classes[i]
-                    det_name = self.category_index[det_state]['name']
-                    det_scores[det_name] += det_score
+                    #det_state = self.detection_classes[i]
+                    #det_name = self.category_index[det_state]['name']
+                    det_scores[det_class[self.detection_classes[i]-1]] += det_score
                     det_count += 1
 
         max_det_score = 0
@@ -164,11 +165,11 @@ class TLClassifier(object):
 
         predicted_state = self.predict_state()
 
-        if predicted_state == "Red":
+        if predicted_state == "red":
             return TrafficLight.RED
-        elif predicted_state == "Yellow":
+        elif predicted_state == "yellow":
             return TrafficLight.YELLOW
-        elif predicted_state == "Green":
+        elif predicted_state == "green":
             return TrafficLight.GREEN
 
         return TrafficLight.UNKNOWN
