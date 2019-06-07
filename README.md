@@ -88,3 +88,67 @@ Specific to these libraries, the simulator grader and Carla use the following:
 | OpenMP | N/A | N/A |
 
 We are working on a fix to line up the OpenCV versions between the two.
+
+
+### System Analysis
+This project is composed of three parts.
+First one is object detection that is made of retrained inference model with pre-trained. Second one is communication line with ROS. Every node has communication line of publish and subscribe. They get or receive data using ROS communication system. Last one is driving of car with PID control.
+
+
+### Part 1. Object Detection
+#### 1. Sample Images
+We need to get and select the files to detect. Next, we set the labels to sort for traffic signs in each pictures. signs are like red, yellow, green.
+It's easy to make labels in xml formats below links
+reference : https://github.com/tzutalin/labelImg
+
+#### 2. XML to CSV
+We have to convert xmls of label information to csv for making TFRecords file. This helps to train easier.
+To do complete, 
+1. download git : https://github.com/tensorflow/models/ => tree/master/research/object_detection
+2. run "python xmltocsv.py" in root of upper git installed
+
+#### 3. CSV to TFRecord
+to create train data:
+   python generate_tfrecord.py --csv_input=data/train_labels.csv  --output_path=data/train.record
+to create test data:
+   python generate_tfrecord.py --csv_input=data/test_labels.csv  --output_path=data/test.record
+
+#### 4. Training
+I choose 'ssd_mobilenet_v1_coco_2018_01_28.config' for trainining.
+for training : 10,000 times
+```
+simulator : python legacy/train.py --logtostderr --pipeline_config_path=train_carnd_sim/ssd_mobilenet_v1_coco_2018_01_28.config --train_dir=train_carnd_sim/
+
+real : python legacy/train.py --logtostderr --pipeline_config_path=train_carnd_real/ssd_mobilenet_v1_coco_2018_01_28.config --train_dir=train_carnd_real/
+```
+for exporting graph : 100,000 times
+```
+simulator : python export_inference_graph.py --input_type image_tensor --pipeline_config_path train_carnd_sim/ssd_mobilenet_v1_coco_2018_01_28.config --trained_checkpoint_prefix train_carnd_sim/model.ckpt-10000 --output_directory carnd_capstone_sim_graph
+
+real : python export_inference_graph.py --input_type image_tensor --pipeline_config_path train_carnd_real/ssd_mobilenet_v1_coco_2018_01_28.config --trained_checkpoint_prefix train_carnd_real/model.ckpt-100000 --output_directory carnd_capstone_realgraph
+```
+##### Result
+Simulator          |  Real
+:-------------------------:|:-------------------------:
+![sim_1](./result/sim_1.png)  |  ![real_1](./result/real_1.png)
+:-------------------------:|:-------------------------:
+![sim_2](./result/sim_2.png)  |  ![real_2](./result/real_2.png)
+:-------------------------:|:-------------------------:
+![sim_3](./result/sim_3.png)  |  ![real_3](./result/real_3.png)
+
+
+
+
+### Part 2. Communication with ROS
+![diagram](./result/final-project-ros-graph-v2.png)
+In simulation, It's really important to synchronize message between modules. Because camera image processing, object detection, message processing, network performance and system performace make delay for communication, So I had to modify parameters. 
+in bridge.py : publish_camera => 1 of 10th
+dbw_node.py : loop => 10 Hz
+waypoint_updater.py : loop => 10 Hz
+
+
+
+### Part 3. PID Control
+DBW node sends throttle, brake and steering to simulator
+If throttle value is over than 0.12, then it's disconnected with server.
+
